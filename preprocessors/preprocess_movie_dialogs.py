@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """Preprocesses Cornell Movie Dialog data."""
 import sys
 import codecs

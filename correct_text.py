@@ -256,9 +256,11 @@ def decode(sess, model, data_reader, data_to_decode, corrective_tokens=set(),
 
     corrective_tokens_mask = np.zeros(model.target_vocab_size)
     corrective_tokens_mask[EOS_ID] = 1.0
-    for token in corrective_tokens:
-        corrective_tokens_mask[data_reader.convert_token_to_id(token)] = 1.0
-
+    #for token in corrective_tokens:
+    #    corrective_tokens_mask[data_reader.convert_token_to_id(token)] = 1.0
+    for tokens in corrective_tokens:
+        for token in tokens:
+            corrective_tokens_mask[data_reader.convert_token_to_id(token)] = 1.0
     for tokens in data_to_decode:
         token_ids = [data_reader.convert_token_to_id(token) for token in tokens]
 
