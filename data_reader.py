@@ -42,8 +42,9 @@ class DataReader(object):
             # Insert the special tokens at the beginning.
             vocabulary[0:0] = special_tokens
             full_token_and_id = zip(vocabulary, range(len(vocabulary)))
-            self.full_token_to_id = dict(full_token_and_id)
-            self.token_to_id = dict(full_token_and_id[:max_vocabulary_size])
+            full_token_and_id_zl = list(full_token_and_id)
+            self.full_token_to_id = dict(full_token_and_id_zl)
+            self.token_to_id = dict(full_token_and_id_zl[:max_vocabulary_size])
 
         self.id_to_token = {v: k for k, v in self.token_to_id.items()}
 

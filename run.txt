@@ -1,0 +1,9 @@
+
+Train:
+python3 correct_text.py --train_path ./corpus/movie_train.txt --val_path ./corpus/movie_val.txt --config DefaultMovieDialogConfig --data_reader_type MovieDialogReader --model_path ./movie_dialog_model
+
+Decode:
+python3 correct_text.py --train_path ./corpus/movie_train.txt --test_path ./corpus/movie_test.txt --config DefaultMovieDialogConfig --data_reader_type MovieDialogReader --model_path ./movie_dialog_model --decode
+
+Correct:
+python3 correct_text.py --train_path ./corpus/movie_train.txt --config DefaultMovieDialogConfig --data_reader_type MovieDialogReader --model_path ./movie_dialog_model --correct

@@ -42,8 +42,13 @@ tf.app.flags.DEFINE_boolean("decode", False, "Whether we should decode data "
                                              "train a model and save it at "
                                              "model_path.")
 
+tf.app.flags.DEFINE_boolean("correct", False, "Whether we should correct sentence.")
+
+tf.app.flags.DEFINE_boolean("evaluate", False, "Whether we should evaluate sentence.")
+                                             
 FLAGS = tf.app.flags.FLAGS
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 class TestConfig():
     # We use a number of buckets and pad to the closest one for efficiency.
@@ -123,12 +128,13 @@ def create_model(session, forward_only, model_path, config=TestConfig()):
         forward_only=forward_only,
         config=config)
     ckpt = tf.train.get_checkpoint_state(model_path)
-    if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
+    if ckpt:
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         model.saver.restore(session, ckpt.model_checkpoint_path)
+        sys.stdout.flush()
     else:
         print("Created model with fresh parameters.")
-        session.run(tf.initialize_all_variables())
+        session.run(tf.global_variables_initializer())#tf.initialize_all_variables()
     return model
 
 
@@ -271,10 +277,12 @@ def decode(sess, model, data_reader, data_to_decode, corrective_tokens=set(),
             {bucket_id: [(token_ids, [])]}, bucket_id)
 
         # Get output logits for the sentence.
-        _, _, output_logits = model.step(
+        _, decode_loss, output_logits = model.step(
             sess, encoder_inputs, decoder_inputs, target_weights, bucket_id,
             True, corrective_tokens=corrective_tokens_mask)
-
+        decode_ppx = math.exp(float(decode_loss)) if decode_loss < 300 else float("inf")
+        print("decode: bucket %d perplexity %.2f" % (bucket_id, decode_ppx))
+            
         oov_input_tokens = [token for token in tokens if
                             data_reader.is_unknown_token(token)]
 
@@ -282,7 +290,6 @@ def decode(sess, model, data_reader, data_to_decode, corrective_tokens=set(),
         next_oov_token_idx = 0
 
         for logit in output_logits:
-
             max_likelihood_token_id = int(np.argmax(logit, axis=1))
             # First check to see if this logit most likely points to the EOS
             # identifier.
@@ -407,24 +414,63 @@ def main(_):
         raise ValueError("config argument not recognized; must be one of: "
                          "TestConfig, DefaultPTBConfig, "
                          "DefaultMovieDialogConfig")
-
+                         
+    is_train = not (FLAGS.correct or FLAGS.evaluate or FLAGS.decode)
+                         
     # Determine which kind of DataReader we want to use.
     if FLAGS.data_reader_type == "MovieDialogReader":
-        data_reader = MovieDialogReader(config, FLAGS.train_path)
+        data_reader = MovieDialogReader(config, FLAGS.train_path) if is_train else None
     elif FLAGS.data_reader_type == "PTBDataReader":
         data_reader = PTBDataReader(config, FLAGS.train_path)
     else:
         raise ValueError("data_reader_type argument not recognized; must be "
                          "one of: MovieDialogReader, PTBDataReader")
 
-    if FLAGS.decode:
+    corrective_tokens = set()
+    import pickle
+    if not is_train:        
+        with open(os.path.join(FLAGS.model_path, "token_to_id.pickle"), "rb") as f:
+            token_to_id = pickle.load(f)
+        data_reader = MovieDialogReader(config, None, token_to_id, dropout_prob=0.25, replacement_prob=0.25, dataset_copies=1)
+        #with open(os.path.join(FLAGS.model_path, "corrective_tokens.pickle"), "rb") as f:
+        #    corrective_tokens = pickle.load(f)
+        corrective_tokens = data_reader.read_tokens(FLAGS.train_path)
+    else:
+        corrective_tokens = get_corrective_tokens(data_reader, FLAGS.train_path)   
+        print(corrective_tokens) 
+        sys.stdout.flush()
+        with open(os.path.join(FLAGS.model_path, "corrective_tokens.pickle"), "wb") as f:
+            pickle.dump(corrective_tokens, f)
+        with open(os.path.join(FLAGS.model_path, "token_to_id.pickle"), "wb") as f:
+            pickle.dump(data_reader.token_to_id, f)
+
+
+    if FLAGS.correct:
+        with tf.Session() as session:
+            model = create_model(session, True, FLAGS.model_path, config=config)
+            print("Loaded model. Beginning correcting.")
+            while True:
+                sentence = input("Input sentence or exit\n")
+                if sentence:
+                    if sentence.lower() == 'exit':
+                        break                    
+                    decoded = decode_sentence(session, model=model, data_reader=data_reader, sentence=sentence, corrective_tokens=corrective_tokens, verbose=True)
+                    sys.stdout.flush()
+    elif FLAGS.evaluate:
+        with tf.Session() as session:
+            model = create_model(session, True, FLAGS.model_path, config=config)
+            print("Loaded model. Beginning evaluating.")
+            errors = evaluate_accuracy(session, model=model, data_reader=data_reader, corrective_tokens=corrective_tokens, test_path=FLAGS.test_path)
+            print(errors)
+            sys.stdout.flush()
+    elif FLAGS.decode:
         # Decode test sentences.
         with tf.Session() as session:
             model = create_model(session, True, FLAGS.model_path, config=config)
             print("Loaded model. Beginning decoding.")
             decodings = decode(session, model=model, data_reader=data_reader,
                                data_to_decode=data_reader.read_tokens(
-                                   FLAGS.test_path), verbose=False)
+                                   FLAGS.test_path), corrective_tokens=corrective_tokens, verbose=False)
             # Write the decoded tokens to stdout.
             for tokens in decodings:
                 print(" ".join(tokens))
@@ -435,4 +481,5 @@ def main(_):
 
 
 if __name__ == "__main__":
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     tf.app.run()

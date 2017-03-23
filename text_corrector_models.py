@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import random
+import random, os
 
 import numpy as np
 import tensorflow as tf
@@ -11,9 +11,13 @@ from tensorflow.python.ops import embedding_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 
+from tensorflow.contrib.rnn.python.ops import core_rnn_cell_impl
+
+#from tensorflow.contrib.legacy_seq2seq.python.ops import seq2seq
 import seq2seq
 from data_reader import PAD_ID, GO_ID
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 class TextCorrectorModel(object):
     """Sequence-to-sequence model used to correct grammatical errors in text.
@@ -88,7 +92,7 @@ class TextCorrectorModel(object):
                                                np.zeros(self.target_vocab_size),
                                                shape=[self.target_vocab_size],
                                                dtype=tf.float32)
-        batched_corrective_tokens = tf.pack(
+        batched_corrective_tokens = tf.stack(
             [corrective_tokens_tensor] * self.batch_size)
         self.batch_corrective_tokens_mask = batch_corrective_tokens_mask = \
             tf.placeholder(
@@ -111,20 +115,20 @@ class TextCorrectorModel(object):
 
             output_projection = (w, b)
 
-            def sampled_loss(inputs, labels):
+            def sampled_loss(labels, inputs):
                 labels = tf.reshape(labels, [-1, 1])
-                return tf.nn.sampled_softmax_loss(w_t, b, inputs, labels,
+                return tf.nn.sampled_softmax_loss(w_t, b, labels, inputs,
                                                   num_samples,
                                                   self.target_vocab_size)
             softmax_loss_function = sampled_loss
 
         # Create the internal multi-layer cell for our RNN.
-        single_cell = tf.nn.rnn_cell.GRUCell(size)
+        single_cell = core_rnn_cell_impl.GRUCell(size)
         if use_lstm:
-            single_cell = tf.nn.rnn_cell.BasicLSTMCell(size)
+            single_cell = core_rnn_cell_impl.BasicLSTMCell(size)
         cell = single_cell
         if num_layers > 1:
-            cell = tf.nn.rnn_cell.MultiRNNCell([single_cell] * num_layers)
+            cell = core_rnn_cell_impl.MultiRNNCell([single_cell] * num_layers)
 
         # The seq2seq function: we use embedding for the input and attention.
         def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
@@ -167,7 +171,7 @@ class TextCorrectorModel(object):
 
         # Training outputs and losses.
         if forward_only:
-            self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(
+            self.outputs, self.losses = seq2seq.model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets,
                 lambda x, y: seq2seq_f(x, y, True),
@@ -185,7 +189,7 @@ class TextCorrectorModel(object):
                                                      input_bias)
                         for output in self.outputs[b]]
         else:
-            self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(
+            self.outputs, self.losses = seq2seq.model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets,
                 lambda x, y: seq2seq_f(x, y, False),
@@ -209,10 +213,10 @@ class TextCorrectorModel(object):
                     zip(clipped_gradients, params),
                     global_step=self.global_step))
 
-        self.saver = tf.train.Saver(tf.all_variables())
+        self.saver = tf.train.Saver(tf.global_variables())
 
     def build_input_bias(self, encoder_inputs, batch_corrective_tokens_mask):
-        packed_one_hot_inputs = tf.one_hot(indices=tf.pack(
+        packed_one_hot_inputs = tf.one_hot(indices=tf.stack(
             encoder_inputs, axis=1), depth=self.target_vocab_size)
         return tf.maximum(batch_corrective_tokens_mask,
                           tf.reduce_max(packed_one_hot_inputs,
@@ -374,7 +378,7 @@ def project_and_apply_input_bias(logits, output_projection, input_bias):
     # Apply input bias, which is a mask of shape [batch, vocab len]
     # where each token from the input in addition to all "corrective"
     # tokens are set to 1.0.
-    return tf.mul(probs, input_bias)
+    return tf.multiply(probs, input_bias)
 
 
 def apply_input_bias_and_extract_argmax_fn_factory(input_bias):

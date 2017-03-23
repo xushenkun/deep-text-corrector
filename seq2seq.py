@@ -69,13 +69,13 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import embedding_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
-from tensorflow.python.ops import rnn
-from tensorflow.python.ops import rnn_cell
+from tensorflow.contrib.rnn.python.ops import core_rnn as rnn
+from tensorflow.contrib.rnn.python.ops import core_rnn_cell as rnn_cell
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import nest
 
 # TODO(ebrevdo): Remove once _linear is fully deprecated.
-linear = rnn_cell._linear  # pylint: disable=protected-access
+from tensorflow.contrib.rnn.python.ops.core_rnn_cell_impl import _linear as linear  # pylint: disable=protected-access
 
 
 def _extract_argmax_and_embed(embedding, output_projection=None,
@@ -174,7 +174,7 @@ def basic_rnn_seq2seq(
           It is a 2D Tensor of shape [batch_size x cell.state_size].
     """
     with variable_scope.variable_scope(scope or "basic_rnn_seq2seq"):
-        _, enc_state = rnn.rnn(cell, encoder_inputs, dtype=dtype)
+        _, enc_state = rnn.static_rnn(cell, encoder_inputs, dtype=dtype)
         return rnn_decoder(decoder_inputs, enc_state, cell)
 
 
@@ -206,7 +206,7 @@ def tied_rnn_seq2seq(encoder_inputs, decoder_inputs, cell,
     """
     with variable_scope.variable_scope("combined_tied_rnn_seq2seq"):
         scope = scope or "tied_rnn_seq2seq"
-        _, enc_state = rnn.rnn(
+        _, enc_state = rnn.static_rnn(
             cell, encoder_inputs, dtype=dtype, scope=scope)
         variable_scope.get_variable_scope().reuse_variables()
         return rnn_decoder(decoder_inputs, enc_state, cell,
@@ -341,7 +341,7 @@ def embedding_rnn_seq2seq(encoder_inputs,
         encoder_cell = rnn_cell.EmbeddingWrapper(
             cell, embedding_classes=num_encoder_symbols,
             embedding_size=embedding_size)
-        _, encoder_state = rnn.rnn(encoder_cell, encoder_inputs, dtype=dtype)
+        _, encoder_state = rnn.static_rnn(encoder_cell, encoder_inputs, dtype=dtype)
 
         # Decoder.
         if output_projection is None:
@@ -583,7 +583,7 @@ def attention_decoder(decoder_inputs,
         batch_size = array_ops.shape(decoder_inputs[0])[0]  # Needed for reshaping.
         attn_length = attention_states.get_shape()[1].value
         if attn_length is None:
-            attn_length = shape(attention_states)[1]
+            attn_length = array_ops.shape(attention_states)[1]
         attn_size = attention_states.get_shape()[2].value
 
         # To calculate W1 * h_t we use a 1-by-1 convolution, need to reshape before.
@@ -610,7 +610,7 @@ def attention_decoder(decoder_inputs,
                     ndims = q.get_shape().ndims
                     if ndims:
                         assert ndims == 2
-                query = array_ops.concat(1, query_list)
+                query = array_ops.concat(query_list, 1)
             for a in xrange(num_heads):
                 with variable_scope.variable_scope("Attention_%d" % a):
                     y = linear(query, attention_vec_size, True)
@@ -628,7 +628,7 @@ def attention_decoder(decoder_inputs,
 
         outputs = []
         prev = None
-        batch_attn_size = array_ops.pack([batch_size, attn_size])
+        batch_attn_size = array_ops.stack([batch_size, attn_size])
         attns = [array_ops.zeros(batch_attn_size, dtype=dtype)
                  for _ in xrange(num_heads)]
         for a in attns:  # Ensure the second shape of attention vectors is set.
@@ -817,13 +817,13 @@ def embedding_attention_seq2seq(encoder_inputs,
         encoder_cell = rnn_cell.EmbeddingWrapper(
             cell, embedding_classes=num_encoder_symbols,
             embedding_size=embedding_size)
-        encoder_outputs, encoder_state = rnn.rnn(
+        encoder_outputs, encoder_state = rnn.static_rnn(
             encoder_cell, encoder_inputs, dtype=dtype)
 
         # First calculate a concatenation of encoder outputs to put attention on.
         top_states = [array_ops.reshape(e, [-1, 1, cell.output_size])
                       for e in encoder_outputs]
-        attention_states = array_ops.concat(1, top_states)
+        attention_states = array_ops.concat(top_states, 1)
 
         # Decoder.
         output_size = None
@@ -939,7 +939,7 @@ def one2many_rnn_seq2seq(encoder_inputs,
         encoder_cell = rnn_cell.EmbeddingWrapper(
             cell, embedding_classes=num_encoder_symbols,
             embedding_size=embedding_size)
-        _, encoder_state = rnn.rnn(encoder_cell, encoder_inputs, dtype=dtype)
+        _, encoder_state = rnn.static_rnn(encoder_cell, encoder_inputs, dtype=dtype)
 
         # Decoder.
         for name, decoder_inputs in decoder_inputs_dict.items():
@@ -1023,9 +1023,9 @@ def sequence_loss_by_example(logits, targets, weights,
                 # violates our general scalar strictness policy.
                 target = array_ops.reshape(target, [-1])
                 crossent = nn_ops.sparse_softmax_cross_entropy_with_logits(
-                    logit, target)
+                    labels=target, logits=logit)
             else:
-                crossent = softmax_loss_function(logit, target)
+                crossent = softmax_loss_function(target, logit)
             log_perp_list.append(crossent * weight)
         log_perps = math_ops.add_n(log_perp_list)
         if average_across_timesteps:

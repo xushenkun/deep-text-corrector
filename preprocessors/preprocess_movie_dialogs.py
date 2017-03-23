@@ -1,4 +1,6 @@
 """Preprocesses Cornell Movie Dialog data."""
+import sys
+import codecs
 import nltk
 import tensorflow as tf
 
@@ -10,12 +12,12 @@ FLAGS = tf.app.flags.FLAGS
 
 
 def main(_):
-    with open(FLAGS.raw_data, "r") as raw_data, \
+    with codecs.open(FLAGS.raw_data, "r", "utf-8", errors='ignore') as raw_data, \
             open(FLAGS.out_file, "w") as out:
         for line in raw_data:
             parts = line.split(" +++$+++ ")
             dialog_line = parts[-1]
-            s = dialog_line.strip().lower().decode("utf-8", "ignore")
+            s = dialog_line.strip().lower()#.decode("utf-8", "ignore")
             preprocessed_line = " ".join(nltk.word_tokenize(s))
             out.write(preprocessed_line + "\n")
 
