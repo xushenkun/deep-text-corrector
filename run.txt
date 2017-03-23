@@ -7,3 +7,7 @@ python3 correct_text.py --train_path ./corpus/movie_train.txt --test_path ./corp
 
 Correct:
 python3 correct_text.py --train_path ./corpus/movie_train.txt --config DefaultMovieDialogConfig --data_reader_type MovieDialogReader --model_path ./movie_dialog_model --correct
+
+Kvothe went to market
+the Cardinals did better then the Cubs in the offseason
+you must have girlfriend
