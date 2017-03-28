@@ -29,13 +29,13 @@ from text_corrector_data_readers import MovieDialogReader, PTBDataReader
 
 from text_corrector_models import TextCorrectorModel
 
-tf.app.flags.DEFINE_string("config", "TestConfig", "Name of config to use.")
+tf.app.flags.DEFINE_string("config", "DefaultMovieDialogConfig", "Name of config to use.")
 tf.app.flags.DEFINE_string("data_reader_type", "MovieDialogReader",
                            "Type of data reader to use.")
-tf.app.flags.DEFINE_string("train_path", "train", "Training data path.")
-tf.app.flags.DEFINE_string("val_path", "val", "Validation data path.")
-tf.app.flags.DEFINE_string("test_path", "test", "Testing data path.")
-tf.app.flags.DEFINE_string("model_path", "model", "Path where the model is "
+tf.app.flags.DEFINE_string("train_path", "corpus/movie_train.txt", "Training data path.")
+tf.app.flags.DEFINE_string("val_path", "corpus/movie_val.txt", "Validation data path.")
+tf.app.flags.DEFINE_string("test_path", "corpus/movie_test.txt", "Testing data path.")
+tf.app.flags.DEFINE_string("model_path", "movie_dialog_model", "Path where the model is "
                                                   "saved.")
 tf.app.flags.DEFINE_boolean("decode", False, "Whether we should decode data "
                                              "at test_path. The default is to "
@@ -140,8 +140,7 @@ def create_model(session, forward_only, model_path, config=TestConfig()):
 
 def train(data_reader, train_path, test_path, model_path):
     """"""
-    print(
-        "Reading data; train = {}, test = {}".format(train_path, test_path))
+    print("Reading data; train = {}, test = {}".format(train_path, test_path))
     config = data_reader.config
     train_data = data_reader.build_dataset(train_path)
     test_data = data_reader.build_dataset(test_path)
@@ -273,21 +272,18 @@ def decode(sess, model, data_reader, data_to_decode, corrective_tokens=set(),
             continue
 
         bucket_id = min(matching_buckets)
-
         # Get a 1-element batch to feed the sentence to the model.
         encoder_inputs, decoder_inputs, target_weights = model.get_batch(
             {bucket_id: [(token_ids, [])]}, bucket_id)
-
         # Get output logits for the sentence.
         _, decode_loss, output_logits = model.step(
             sess, encoder_inputs, decoder_inputs, target_weights, bucket_id,
             True, corrective_tokens=corrective_tokens_mask)
         decode_ppx = math.exp(float(decode_loss)) if decode_loss < 300 else float("inf")
         print("decode: bucket %d perplexity %.2f" % (bucket_id, decode_ppx))
-            
+        #print(output_logits)
         oov_input_tokens = [token for token in tokens if
                             data_reader.is_unknown_token(token)]
-
         outputs = []
         next_oov_token_idx = 0
 
@@ -299,6 +295,7 @@ def decode(sess, model, data_reader, data_to_decode, corrective_tokens=set(),
                 break
 
             token = data_reader.convert_id_to_token(max_likelihood_token_id)
+            #print(token)
             if data_reader.is_unknown_token(token):
                 # Replace the "unknown" token with the most probable OOV
                 # token from the input.
@@ -436,7 +433,8 @@ def main(_):
         data_reader = MovieDialogReader(config, None, token_to_id, dropout_prob=0.25, replacement_prob=0.25, dataset_copies=1)
         #with open(os.path.join(FLAGS.model_path, "corrective_tokens.pickle"), "rb") as f:
         #    corrective_tokens = pickle.load(f)
-        corrective_tokens = data_reader.read_tokens(FLAGS.train_path)
+        #corrective_tokens = data_reader.read_tokens(FLAGS.train_path)
+        corrective_tokens = get_corrective_tokens(data_reader, FLAGS.train_path)
     else:
         corrective_tokens = get_corrective_tokens(data_reader, FLAGS.train_path)   
         print(corrective_tokens) 
@@ -449,15 +447,17 @@ def main(_):
 
     if FLAGS.correct:
         with tf.Session() as session:
+        #session = tf.InteractiveSession()
             model = create_model(session, True, FLAGS.model_path, config=config)
             print("Loaded model. Beginning correcting.")
             while True:
                 sentence = input("Input sentence or exit\n")
                 if sentence:
                     if sentence.lower() == 'exit':
-                        break                    
+                        break                
                     decoded = decode_sentence(session, model=model, data_reader=data_reader, sentence=sentence, corrective_tokens=corrective_tokens, verbose=True)
                     sys.stdout.flush()
+        #session.close()
     elif FLAGS.evaluate:
         with tf.Session() as session:
             model = create_model(session, True, FLAGS.model_path, config=config)
