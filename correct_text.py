@@ -25,7 +25,7 @@ import numpy as np
 import tensorflow as tf
 
 from data_reader import EOS_ID
-from text_corrector_data_readers import MovieDialogReader, PTBDataReader
+from text_corrector_data_readers import MovieDialogReader, PTBDataReader, FCEReader
 
 from text_corrector_models import TextCorrectorModel
 
@@ -111,6 +111,28 @@ class DefaultMovieDialogConfig():
 
     projection_bias = 0.0
 
+
+class DefaultFCEConfig():
+    buckets = [(100, 100), (200, 200), (300, 300), (400, 400)]
+
+    steps_per_checkpoint = 100
+    max_steps = 10000
+
+    # The OOV resolution scheme used in decode() allows us to use a much smaller
+    # vocabulary.
+    max_vocabulary_size = 10000
+
+    size = 512
+    num_layers = 4
+    max_gradient_norm = 5.0
+    batch_size = 64
+    learning_rate = 0.5
+    learning_rate_decay_factor = 0.99
+
+    use_lstm = True
+    use_rms_prop = False
+
+    projection_bias = 0.0
 
 def create_model(session, forward_only, model_path, config=TestConfig()):
     """Create translation model and initialize or load parameters in session."""
@@ -409,9 +431,11 @@ def main(_):
         config = DefaultMovieDialogConfig()
     elif FLAGS.config == "DefaultPTBConfig":
         config = DefaultPTBConfig()
+    elif FLAGS.config == "DefaultFCEConfig":
+        config = DefaultFCEConfig()
     else:
         raise ValueError("config argument not recognized; must be one of: "
-                         "TestConfig, DefaultPTBConfig, "
+                         "TestConfig, DefaultPTBConfig, DefaultFCEConfig, "
                          "DefaultMovieDialogConfig")
                          
     is_train = not (FLAGS.correct or FLAGS.evaluate or FLAGS.decode)
@@ -421,6 +445,8 @@ def main(_):
         data_reader = MovieDialogReader(config, FLAGS.train_path) if is_train else None
     elif FLAGS.data_reader_type == "PTBDataReader":
         data_reader = PTBDataReader(config, FLAGS.train_path)
+    elif FLAGS.data_reader_type == "FCEReader":
+        data_reader = FCEReader(config, FLAGS.train_path)
     else:
         raise ValueError("data_reader_type argument not recognized; must be "
                          "one of: MovieDialogReader, PTBDataReader")
@@ -430,14 +456,20 @@ def main(_):
     if not is_train:        
         with open(os.path.join(FLAGS.model_path, "token_to_id.pickle"), "rb") as f:
             token_to_id = pickle.load(f)
-        data_reader = MovieDialogReader(config, None, token_to_id, dropout_prob=0.25, replacement_prob=0.25, dataset_copies=1)
+        if FLAGS.data_reader_type == "MovieDialogReader":
+            data_reader = MovieDialogReader(config, None, token_to_id, dropout_prob=0.25, replacement_prob=0.25, dataset_copies=1)
+        elif FLAGS.data_reader_type == "PTBDataReader":
+            data_reader = PTBDataReader(config, None, token_to_id, dropout_prob=0.25, replacement_prob=0.25, dataset_copies=1)
+        elif FLAGS.data_reader_type == "FCEReader":
+            data_reader = FCEReader(config, None, token_to_id, dropout_prob=0.25, replacement_prob=0.25, dataset_copies=1)
         #with open(os.path.join(FLAGS.model_path, "corrective_tokens.pickle"), "rb") as f:
         #    corrective_tokens = pickle.load(f)
         #corrective_tokens = data_reader.read_tokens(FLAGS.train_path)
         corrective_tokens = get_corrective_tokens(data_reader, FLAGS.train_path)
+        #print(corrective_tokens)
     else:
         corrective_tokens = get_corrective_tokens(data_reader, FLAGS.train_path)   
-        print(corrective_tokens) 
+        #print(corrective_tokens) 
         sys.stdout.flush()
         with open(os.path.join(FLAGS.model_path, "corrective_tokens.pickle"), "wb") as f:
             pickle.dump(corrective_tokens, f)

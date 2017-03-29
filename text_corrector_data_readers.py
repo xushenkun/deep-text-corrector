@@ -115,3 +115,53 @@ class MovieDialogReader(DataReader):
             for line in f:
                 yield line.lower().strip().split()
 
+class FCEReader(DataReader):
+    """
+    DataReader used to read and tokenize data from the FCE dataset.
+    """
+
+    UNKNOWN_TOKEN = "UNK"
+
+    DROPOUT_TOKENS = {"a", "an", "the", "'ll", "'s", "'m", "'ve"}  # Add "to"
+
+    REPLACEMENTS = {"there": "their", "their": "there", "then": "than",
+                    "than": "then"}
+    # Add: "be":"to"
+
+    def __init__(self, config, train_path=None, token_to_id=None,
+                 dropout_prob=0.25, replacement_prob=0.25, dataset_copies=2):
+        super(FCEReader, self).__init__(
+            config, train_path=train_path, token_to_id=token_to_id,
+            special_tokens=[
+                PAD_TOKEN, GO_TOKEN, EOS_TOKEN,
+                FCEReader.UNKNOWN_TOKEN],
+            dataset_copies=dataset_copies)
+
+        self.dropout_prob = dropout_prob
+        self.replacement_prob = replacement_prob
+
+        self.UNKNOWN_ID = self.token_to_id[FCEReader.UNKNOWN_TOKEN]
+
+    def read_samples_by_string(self, path):
+        with open(path, "r") as f:
+            while True:
+                line1 = f.readline()
+                if not line1 and line1 != '':
+                    break
+                line2 = f.readline()
+                if not line2 and line2 != '':
+                    break
+                source = line1.lower().strip().split()
+                target = line2.lower().strip().split()
+                yield source, target
+
+    def unknown_token(self):
+        return FCEReader.UNKNOWN_TOKEN
+
+    def read_tokens(self, path):
+        i = 0
+        with open(path, "r") as f:
+            for line in f:
+                if i%2 == 0:
+                    yield line.lower().strip().split()
+                i+=1
