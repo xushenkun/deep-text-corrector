@@ -113,14 +113,14 @@ class DefaultMovieDialogConfig():
 
 
 class DefaultFCEConfig():
-    buckets = [(100, 100), (200, 200), (300, 300), (400, 400)]
+    buckets = [(10, 10), (20, 20), (30, 30), (40, 40)]
 
     steps_per_checkpoint = 100
     max_steps = 10000
 
     # The OOV resolution scheme used in decode() allows us to use a much smaller
     # vocabulary.
-    max_vocabulary_size = 10000
+    max_vocabulary_size = 2000
 
     size = 512
     num_layers = 4
@@ -153,10 +153,10 @@ def create_model(session, forward_only, model_path, config=TestConfig()):
     if ckpt:
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         model.saver.restore(session, ckpt.model_checkpoint_path)
-        sys.stdout.flush()
     else:
         print("Created model with fresh parameters.")
         session.run(tf.global_variables_initializer())#tf.initialize_all_variables()
+    sys.stdout.flush()
     return model
 
 
@@ -166,21 +166,20 @@ def train(data_reader, train_path, test_path, model_path):
     config = data_reader.config
     train_data = data_reader.build_dataset(train_path)
     test_data = data_reader.build_dataset(test_path)
-
     with tf.Session() as sess:
         # Create model.
         print(
             "Creating %d layers of %d units." % (
                 config.num_layers, config.size))
+        sys.stdout.flush()
         model = create_model(sess, False, model_path, config=config)
-
         # Read data into buckets and compute their sizes.
         train_bucket_sizes = [len(train_data[b]) for b in
                               range(len(config.buckets))]
         print("Training bucket sizes: {}".format(train_bucket_sizes))
         train_total_size = float(sum(train_bucket_sizes))
         print("Total train size: {}".format(train_total_size))
-
+        sys.stdout.flush()
         # A bucket scale is a list of increasing numbers from 0 to 1 that
         # we'll use to select a bucket. Length of [scale[i], scale[i+1]] is
         # proportional to the size if i-th training bucket, as used later.
@@ -511,6 +510,7 @@ def main(_):
                 sys.stdout.flush()
     else:
         print("Training model.")
+        sys.stdout.flush()
         train(data_reader, FLAGS.train_path, FLAGS.val_path, FLAGS.model_path)
 
 

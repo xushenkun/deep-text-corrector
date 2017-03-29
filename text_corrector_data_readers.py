@@ -146,10 +146,10 @@ class FCEReader(DataReader):
         with open(path, "r") as f:
             while True:
                 line1 = f.readline()
-                if not line1 and line1 != '':
+                if not line1:
                     break
                 line2 = f.readline()
-                if not line2 and line2 != '':
+                if not line2:
                     break
                 source = line1.lower().strip().split()
                 target = line2.lower().strip().split()
