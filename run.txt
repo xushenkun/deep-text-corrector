@@ -8,10 +8,20 @@ python3 correct_text.py --train_path ./corpus/movie_train.txt --test_path ./corp
 Correct Movie:
 python3 correct_text.py --train_path ./corpus/movie_train.txt --config DefaultMovieDialogConfig --data_reader_type MovieDialogReader --model_path ./movie_dialog_model --correct
 
-Kvothe went to market
-the Cardinals did better then the Cubs in the offseason
-you must have girlfriend
+
 
 
 Train FCE:
 python3 correct_text.py --train_path ./corpus/fce/fce_train.txt --val_path ./corpus/fce/fce_val.txt --config DefaultFCEConfig --data_reader_type FCEReader --model_path ./fce_model
+
+Correct FCE:
+python3 correct_text.py --train_path ./corpus/fce/fce_train.txt --val_path ./corpus/fce/fce_val.txt --config DefaultFCEConfig --data_reader_type FCEReader --model_path ./fce_model --correct
+
+
+
+
+
+Example:
+Kvothe went to market
+the Cardinals did better then the Cubs in the offseason
+you must have girlfriend

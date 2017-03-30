@@ -85,6 +85,8 @@ class DefaultPTBConfig():
     learning_rate = 0.5
     learning_rate_decay_factor = 0.99
 
+    cpu_num = 4
+
     use_lstm = False
     use_rms_prop = False
 
@@ -109,6 +111,8 @@ class DefaultMovieDialogConfig():
     use_lstm = True
     use_rms_prop = False
 
+    cpu_num = 4
+
     projection_bias = 0.0
 
 
@@ -131,6 +135,8 @@ class DefaultFCEConfig():
 
     use_lstm = True
     use_rms_prop = False
+
+    cpu_num = 4
 
     projection_bias = 0.0
 
@@ -166,7 +172,8 @@ def train(data_reader, train_path, test_path, model_path):
     config = data_reader.config
     train_data = data_reader.build_dataset(train_path)
     test_data = data_reader.build_dataset(test_path)
-    with tf.Session() as sess:
+    sess_config = tf.ConfigProto(device_count={"CPU": config.cpu_num}, inter_op_parallelism_threads=0, intra_op_parallelism_threads=0)
+    with tf.Session(config=sess_config) as sess:
         # Create model.
         print(
             "Creating %d layers of %d units." % (
@@ -475,9 +482,10 @@ def main(_):
         with open(os.path.join(FLAGS.model_path, "token_to_id.pickle"), "wb") as f:
             pickle.dump(data_reader.token_to_id, f)
 
+    sess_config = tf.ConfigProto(device_count={"CPU": config.cpu_num}, inter_op_parallelism_threads=0, intra_op_parallelism_threads=0)
 
     if FLAGS.correct:
-        with tf.Session() as session:
+        with tf.Session(config=sess_config) as session:
         #session = tf.InteractiveSession()
             model = create_model(session, True, FLAGS.model_path, config=config)
             print("Loaded model. Beginning correcting.")
@@ -490,7 +498,7 @@ def main(_):
                     sys.stdout.flush()
         #session.close()
     elif FLAGS.evaluate:
-        with tf.Session() as session:
+        with tf.Session(config=sess_config) as session:
             model = create_model(session, True, FLAGS.model_path, config=config)
             print("Loaded model. Beginning evaluating.")
             errors = evaluate_accuracy(session, model=model, data_reader=data_reader, corrective_tokens=corrective_tokens, test_path=FLAGS.test_path)
@@ -498,7 +506,7 @@ def main(_):
             sys.stdout.flush()
     elif FLAGS.decode:
         # Decode test sentences.
-        with tf.Session() as session:
+        with tf.Session(config=sess_config) as session:
             model = create_model(session, True, FLAGS.model_path, config=config)
             print("Loaded model. Beginning decoding.")
             decodings = decode(session, model=model, data_reader=data_reader,
