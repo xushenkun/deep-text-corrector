@@ -151,8 +151,8 @@ class FCEReader(DataReader):
                 line2 = f.readline()
                 if not line2:
                     break
-                source = line1.lower().strip().split()
-                target = line2.lower().strip().split()
+                source = line1.lower()[5:].strip().split()
+                target = line2.lower()[5:].strip().split()
                 yield source, target
 
     def unknown_token(self):
@@ -162,6 +162,6 @@ class FCEReader(DataReader):
         i = 0
         with open(path, "r") as f:
             for line in f:
-                if i%2 == 0:
-                    yield line.lower().strip().split()
+                if i%2 == 1:
+                    yield line.lower()[5:].strip().split()
                 i+=1
